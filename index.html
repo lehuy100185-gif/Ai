@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI ChatGPT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>🤖 AI ChatGPT</h2>
+
+        <div class="chat-box" id="chatBox"></div>
+
+        <div class="input-area">
+            <input id="input" placeholder="Nhập câu hỏi">
+            <button onclick="send()">Gửi</button>
+        </div>
+    </div>
+
+    <script>
+        async function send() {
+            const input = document.getElementById("input");
+            const chatBox = document.getElementById("chatBox");
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            // Tin nhắn người dùng
+            chatBox.innerHTML += `
+        <div class="msg user">${msg}</div>
+    `;
+            input.value = "";
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // AI đang gõ
+            const typingId = "typing";
+            chatBox.innerHTML += `
+        <div class="msg ai typing" id="${typingId}">AI đang gõ...</div>
+    `;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Gọi server
+            let res = await fetch("http://localhost:3000/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    message: msg
+                })
+            });
+
+            let data = await res.json();
+
+            // Xóa "AI đang gõ"
+            document.getElementById(typingId).remove();
+
+            // Tin nhắn AI
+            chatBox.innerHTML += `
+        <div class="msg ai">${data.reply}</div>
+    `;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+
+</body>
+
+</html>
