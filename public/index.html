@@ -19,17 +19,34 @@
         </div>
     </div>
     <script>
+        const chatBox = document.getElementById("chatBox");
+        const input = document.getElementById("input");
+
+        function saveChat() {
+            localStorage.setItem("chatHistory", chatBox.innerHTML);
+        }
+
+        function loadChat() {
+            const saved = localStorage.getItem("chatHistory");
+            if (saved) {
+                chatBox.innerHTML = saved;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
         async function send() {
-            const input = document.getElementById("input");
-            const chatBox = document.getElementById("chatBox");
             const msg = input.value.trim();
             if (!msg) return;
 
             // User message
-            chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
+            const userDiv = document.createElement("div");
+            userDiv.className = "msg user";
+            userDiv.innerText = msg;
+            chatBox.appendChild(userDiv);
             input.value = "";
+            saveChat();
 
-            // AI bubble
+            // AI message
             const aiDiv = document.createElement("div");
             aiDiv.className = "msg ai";
             chatBox.appendChild(aiDiv);
@@ -55,12 +72,13 @@
                 } = await reader.read();
                 if (done) break;
 
-                const text = decoder.decode(value);
-                aiDiv.innerText += text;
+                aiDiv.innerText += decoder.decode(value);
                 chatBox.scrollTop = chatBox.scrollHeight;
+                saveChat();
             }
         }
     </script>
+
 
     <script src="/chat.js"></script>
 </body>
