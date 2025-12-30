@@ -14,13 +14,55 @@
         <div id="chatBox" class="chat-box"></div>
 
         <div class="input-area">
-            <input id="input" type="text" placeholder="Nhập câu hỏi">
-            <button id="sendBtn">Gửi</button>
+            <input id="input" placeholder="Nhập câu hỏi">
+            <button onclick="send()">Gửi</button>
         </div>
     </div>
+    <script>
+        async function send() {
+            const input = document.getElementById("input");
+            const chatBox = document.getElementById("chatBox");
+            const msg = input.value.trim();
+            if (!msg) return;
 
-    <!-- JS RIÊNG -->
-    <script src="/app.js"></script>
+            // User message
+            chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
+            input.value = "";
+
+            // AI bubble
+            const aiDiv = document.createElement("div");
+            aiDiv.className = "msg ai";
+            chatBox.appendChild(aiDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const response = await fetch("/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    message: msg
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const {
+                    value,
+                    done
+                } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value);
+                aiDiv.innerText += text;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+    </script>
+
+    <script src="/chat.js"></script>
 </body>
 
 </html>
