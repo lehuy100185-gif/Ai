@@ -5,40 +5,127 @@
     <meta charset="UTF-8">
     <title>AI Chat</title>
     <link rel="stylesheet" href="/style.css">
+
+    <style>
+        /* ===== HEADER USER ===== */
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px;
+            border-bottom: 1px solid #2a2b32;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #9ca3af;
+        }
+        
+        .avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #10a37f;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .logout-btn {
+            background: transparent;
+            border: 1px solid #374151;
+            color: #9ca3af;
+            font-size: 14px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+        
+        .logout-btn:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: white;
+        }
+    </style>
 </head>
 
 <body>
     <div class="container">
-        <h2>🤖 AI Chat</h2>
 
+        <!-- HEADER -->
+        <div class="header">
+            <div class="user-info">
+                <div class="avatar" id="avatar">U</div>
+                <span id="user">user</span>
+            </div>
+
+            <h2 style="margin:0;">🤖 AI Chat</h2>
+
+            <button class="logout-btn" onclick="logout()" title="Đăng xuất">
+                ⎋
+            </button>
+        </div>
+
+        <!-- CHAT -->
         <div id="chatBox" class="chat-box"></div>
 
+        <!-- INPUT -->
         <div class="input-area">
-            <input id="input" placeholder="Nhập câu hỏi">
-            <button onclick="send()">Gửi</button>
+            <input id="input" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter') send()">
+            <button onclick="send()">➤</button>
         </div>
+
     </div>
+
     <script>
+        /* ================= AUTH CHECK ================= */
+        const token = localStorage.getItem("token");
+        const username = localStorage.getItem("username");
+
+        if (!token || !username) {
+            window.location.href = "/login.html";
+        }
+
+        /* HIỆN USER + AVATAR */
+        document.getElementById("user").innerText = username;
+        document.getElementById("avatar").innerText = username[0].toUpperCase();
+
         const chatBox = document.getElementById("chatBox");
         const input = document.getElementById("input");
 
+        /* ================= LOAD / SAVE CHAT ================= */
         function saveChat() {
             localStorage.setItem("chatHistory", chatBox.innerHTML);
         }
 
         function loadChat() {
             const saved = localStorage.getItem("chatHistory");
-            if (saved) {
-                chatBox.innerHTML = saved;
-                chatBox.scrollTop = chatBox.scrollHeight;
-            }
+            if (saved) chatBox.innerHTML = saved;
         }
 
+        loadChat();
+
+        /* ================= LOGOUT ================= */
+        function logout() {
+            if (!confirm("Bạn có chắc muốn đăng xuất?")) return;
+            localStorage.clear();
+            window.location.href = "/login.html";
+        }
+
+        /* ================= SEND ================= */
         async function send() {
             const msg = input.value.trim();
             if (!msg) return;
 
-            // User message
             const userDiv = document.createElement("div");
             userDiv.className = "msg user";
             userDiv.innerText = msg;
@@ -46,41 +133,34 @@
             input.value = "";
             saveChat();
 
-            // AI message
             const aiDiv = document.createElement("div");
             aiDiv.className = "msg ai";
+            aiDiv.innerText = "Đang trả lời...";
             chatBox.appendChild(aiDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
 
-            const response = await fetch("/chat", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    message: msg
-                })
-            });
+            try {
+                const res = await fetch("/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: "Bearer " + token
+                    },
+                    body: JSON.stringify({
+                        message: msg
+                    })
+                });
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-
-            while (true) {
-                const {
-                    value,
-                    done
-                } = await reader.read();
-                if (done) break;
-
-                aiDiv.innerText += decoder.decode(value);
-                chatBox.scrollTop = chatBox.scrollHeight;
-                saveChat();
+                const data = await res.json();
+                aiDiv.innerText = data.reply || "❌ Lỗi phản hồi";
+            } catch {
+                aiDiv.innerText = "❌ Không thể kết nối server";
             }
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+            saveChat();
         }
     </script>
 
-
-    <script src="/chat.js"></script>
 </body>
 
 </html>
