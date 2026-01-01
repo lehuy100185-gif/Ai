@@ -25,11 +25,28 @@ function ensureFile(file, initData) {
 
 function readJSON(file, initData = "{}") {
     ensureFile(file, initData);
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    try {
+        return JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+        return JSON.parse(initData);
+    }
 }
 
 function writeJSON(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+/* ================= TOKEN HELPER ================= */
+function getUsernameFromReq(req) {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) return null;
+
+    try {
+        const decoded = jwt.verify(auth.split(" ")[1], JWT_SECRET);
+        return decoded.username;
+    } catch {
+        return null;
+    }
 }
 
 /* ================= REGISTER ================= */
@@ -43,14 +60,15 @@ app.post("/register", async(req, res) => {
 
     const users = readJSON(USERS_FILE, "{}");
 
-    if (users[username])
-        return res.json({ error: "Tài khoản đã tồn tại" });
+    // ✅ CHẶN TRÙNG TÊN TUYỆT ĐỐI
+    if (users[username]) {
+        return res.json({ error: "Tên người dùng đã tồn tại" });
+    }
 
     const hash = await bcrypt.hash(password, 10);
-
     users[username] = { password: hash };
-    writeJSON(USERS_FILE, users);
 
+    writeJSON(USERS_FILE, users);
     res.json({ success: true });
 });
 
@@ -84,17 +102,8 @@ app.post("/chat", async(req, res) => {
         if (!message)
             return res.json({ reply: "❌ Không có nội dung" });
 
-        let username = null;
-        const auth = req.headers.authorization;
+        const username = getUsernameFromReq(req);
 
-        if (auth && auth.startsWith("Bearer ")) {
-            try {
-                const decoded = jwt.verify(auth.split(" ")[1], JWT_SECRET);
-                username = decoded.username;
-            } catch {}
-        }
-
-        /* ===== CALL OLLAMA ===== */
         const response = await fetch("http://localhost:11434/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -121,7 +130,7 @@ app.post("/chat", async(req, res) => {
             return res.json({ reply: "❌ Ollama không trả lời" });
         }
 
-        /* ===== SAVE HISTORY (CHỈ USER) ===== */
+        // ✅ LƯU HISTORY CHỈ KHI ĐÃ ĐĂNG NHẬP
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             if (!chats[username]) chats[username] = [];
@@ -141,16 +150,7 @@ app.post("/chat", async(req, res) => {
 
 /* ================= LOAD HISTORY ================= */
 app.get("/history", (req, res) => {
-    let username = null;
-    const auth = req.headers.authorization;
-
-    if (auth && auth.startsWith("Bearer ")) {
-        try {
-            const decoded = jwt.verify(auth.split(" ")[1], JWT_SECRET);
-            username = decoded.username;
-        } catch {}
-    }
-
+    const username = getUsernameFromReq(req);
     if (!username) return res.json([]);
 
     const chats = readJSON(CHAT_FILE, "{}");
