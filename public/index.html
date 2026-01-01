@@ -2,25 +2,23 @@
 <html lang="vi">
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>AI Chat</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css" />
 
     <style>
-        /* ===== HEADER USER ===== */
-        
         .header {
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
             padding: 14px;
             border-bottom: 1px solid #2a2b32;
         }
         
         .user-info {
             display: flex;
-            align-items: center;
             gap: 8px;
+            align-items: center;
             font-size: 13px;
             color: #9ca3af;
         }
@@ -32,28 +30,37 @@
             background: #10a37f;
             color: white;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             font-weight: bold;
+        }
+        
+        .login-btn {
+            background: #10a37f;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
             font-size: 13px;
         }
         
         .logout-btn {
-            background: transparent;
-            border: 1px solid #374151;
-            color: #9ca3af;
-            font-size: 14px;
-            width: 32px;
-            height: 32px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 12px;
             border-radius: 8px;
             cursor: pointer;
-            transition: all .2s ease;
+            font-size: 13px;
+            display: none;
         }
         
-        .logout-btn:hover {
-            background: #ef4444;
-            border-color: #ef4444;
-            color: white;
+        .guest-note {
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+            padding: 6px;
         }
     </style>
 </head>
@@ -64,86 +71,146 @@
         <!-- HEADER -->
         <div class="header">
             <div class="user-info">
-                <div class="avatar" id="avatar">U</div>
-                <span id="user">user</span>
+                <div class="avatar" id="avatar">G</div>
+                <span id="user">Guest</span>
             </div>
 
-            <h2 style="margin:0;">🤖 AI Chat</h2>
+            <h3>🤖 AI Chat</h3>
 
-            <button class="logout-btn" onclick="logout()" title="Đăng xuất">
-                ⎋
-            </button>
+            <div>
+                <button class="login-btn" id="loginBtn" onclick="goLogin()">Đăng nhập</button>
+                <button class="logout-btn" id="logoutBtn" onclick="logout()">Đăng xuất</button>
+            </div>
         </div>
+
+        <div class="guest-note" id="guestNote"></div>
 
         <!-- CHAT -->
         <div id="chatBox" class="chat-box"></div>
 
         <!-- INPUT -->
         <div class="input-area">
-            <input id="input" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter') send()">
+            <input id="input" placeholder="Nhập câu hỏi..." />
             <button onclick="send()">➤</button>
         </div>
 
     </div>
 
     <script>
-        /* ================= AUTH CHECK ================= */
-        const token = localStorage.getItem("token");
-        const username = localStorage.getItem("username");
+        const MAX_GUEST = 3;
 
-        if (!token || !username) {
-            window.location.href = "/login.html";
-        }
-
-        /* HIỆN USER + AVATAR */
-        document.getElementById("user").innerText = username;
-        document.getElementById("avatar").innerText = username[0].toUpperCase();
-
-        const chatBox = document.getElementById("chatBox");
+        const userEl = document.getElementById("user");
+        const avatarEl = document.getElementById("avatar");
+        const loginBtn = document.getElementById("loginBtn");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const guestNote = document.getElementById("guestNote");
         const input = document.getElementById("input");
+        const chatBox = document.getElementById("chatBox");
 
-        /* ================= LOAD / SAVE CHAT ================= */
-        function saveChat() {
-            localStorage.setItem("chatHistory", chatBox.innerHTML);
+        let token = localStorage.getItem("token");
+        let username = localStorage.getItem("username");
+        let guestCount = Number(localStorage.getItem("guestCount") || 0);
+
+        /* ================= INIT UI ================= */
+        function updateUI() {
+            token = localStorage.getItem("token");
+            username = localStorage.getItem("username");
+            guestCount = Number(localStorage.getItem("guestCount") || 0);
+
+            if (token && username) {
+                userEl.innerText = username;
+                avatarEl.innerText = username[0].toUpperCase();
+                loginBtn.style.display = "none";
+                logoutBtn.style.display = "inline-block";
+                guestNote.innerText = "";
+                input.disabled = false;
+            } else {
+                userEl.innerText = "Guest";
+                avatarEl.innerText = "G";
+                loginBtn.style.display = "inline-block";
+                logoutBtn.style.display = "none";
+                guestNote.innerText =
+                    `Bạn đang dùng Guest (${MAX_GUEST - guestCount}/${MAX_GUEST} câu miễn phí)`;
+                input.disabled = guestCount >= MAX_GUEST;
+            }
         }
 
-        function loadChat() {
-            const saved = localStorage.getItem("chatHistory");
-            if (saved) chatBox.innerHTML = saved;
+        updateUI();
+
+        /* ================= LOAD CHAT HISTORY ================= */
+        async function loadHistory() {
+            try {
+                const res = await fetch("/history", {
+                    headers: token ? {
+                        Authorization: "Bearer " + token
+                    } : {}
+                });
+
+                const history = await res.json();
+                chatBox.innerHTML = "";
+
+                history.forEach(m => {
+                    const div = document.createElement("div");
+                    div.className = "msg " + (m.role === "user" ? "user" : "ai");
+                    div.innerText = m.content;
+                    chatBox.appendChild(div);
+                });
+
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch {
+                console.log("Không load được lịch sử");
+            }
         }
 
-        loadChat();
+        loadHistory();
 
-        /* ================= LOGOUT ================= */
-        function logout() {
-            if (!confirm("Bạn có chắc muốn đăng xuất?")) return;
-            localStorage.clear();
+        /* ================= AUTH ================= */
+        function goLogin() {
             window.location.href = "/login.html";
         }
 
-        /* ================= SEND ================= */
+        function logout() {
+            if (!confirm("Đăng xuất?")) return;
+
+            localStorage.removeItem("token");
+            localStorage.removeItem("username");
+
+            updateUI();
+            loadHistory();
+        }
+
+        /* ================= CHAT ================= */
         async function send() {
             const msg = input.value.trim();
             if (!msg) return;
 
-            const userDiv = document.createElement("div");
-            userDiv.className = "msg user";
-            userDiv.innerText = msg;
-            chatBox.appendChild(userDiv);
-            input.value = "";
-            saveChat();
+            if (!token) {
+                if (guestCount >= MAX_GUEST) {
+                    alert("⚠️ Bạn đã hết 3 câu miễn phí. Vui lòng đăng nhập.");
+                    goLogin();
+                    return;
+                }
+                guestCount++;
+                localStorage.setItem("guestCount", guestCount);
+                updateUI();
+            }
 
-            const aiDiv = document.createElement("div");
-            aiDiv.className = "msg ai";
-            aiDiv.innerText = "Đang trả lời...";
-            chatBox.appendChild(aiDiv);
+            chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
+            input.value = "";
+
+            const ai = document.createElement("div");
+            ai.className = "msg ai";
+            ai.innerText = "Đang trả lời...";
+            chatBox.appendChild(ai);
 
             try {
                 const res = await fetch("/chat", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        Authorization: "Bearer " + token
+                        ...(token && {
+                            Authorization: "Bearer " + token
+                        })
                     },
                     body: JSON.stringify({
                         message: msg
@@ -151,16 +218,14 @@
                 });
 
                 const data = await res.json();
-                aiDiv.innerText = data.reply || "❌ Lỗi phản hồi";
+                ai.innerText = data.reply || "❌ Lỗi phản hồi";
             } catch {
-                aiDiv.innerText = "❌ Không thể kết nối server";
+                ai.innerText = "❌ Không kết nối server";
             }
 
             chatBox.scrollTop = chatBox.scrollHeight;
-            saveChat();
         }
     </script>
-
 </body>
 
 </html>

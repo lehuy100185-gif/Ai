@@ -1,6 +1,5 @@
-[
-  {
-    "username": "LGM",
-    "password": "$2b$10$AE/sKJJg/uYLpUJ027Y4WeUT3AxQXPlyBdP1LOTLU8RKAjsnctgay"
+{
+  "test": {
+    "password": "$2b$10$AEKDtPbe20.e6k6zuNd4XODqoA24LpVg0zMApphKtBEj62jQoIR1O"
   }
-]
+}
