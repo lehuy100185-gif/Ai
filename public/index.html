@@ -35,7 +35,13 @@
             font-weight: bold;
         }
         
-        .login-btn {
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .login-btn,
+        .clear-btn {
             background: #10a37f;
             color: white;
             border: none;
@@ -53,6 +59,11 @@
             border-radius: 8px;
             cursor: pointer;
             font-size: 13px;
+            display: none;
+        }
+        
+        .clear-btn {
+            background: #334155;
             display: none;
         }
         
@@ -77,7 +88,8 @@
 
             <h3>🤖 AI Chat</h3>
 
-            <div>
+            <div class="actions">
+                <button class="clear-btn" id="clearBtn" onclick="clearHistory()">🗑</button>
                 <button class="login-btn" id="loginBtn" onclick="goLogin()">Đăng nhập</button>
                 <button class="logout-btn" id="logoutBtn" onclick="logout()">Đăng xuất</button>
             </div>
@@ -103,6 +115,7 @@
         const avatarEl = document.getElementById("avatar");
         const loginBtn = document.getElementById("loginBtn");
         const logoutBtn = document.getElementById("logoutBtn");
+        const clearBtn = document.getElementById("clearBtn");
         const guestNote = document.getElementById("guestNote");
         const input = document.getElementById("input");
         const chatBox = document.getElementById("chatBox");
@@ -111,7 +124,7 @@
         let username = localStorage.getItem("username");
         let guestCount = Number(localStorage.getItem("guestCount") || 0);
 
-        /* ================= INIT UI ================= */
+        /* ================= UI ================= */
         function updateUI() {
             token = localStorage.getItem("token");
             username = localStorage.getItem("username");
@@ -122,6 +135,7 @@
                 avatarEl.innerText = username[0].toUpperCase();
                 loginBtn.style.display = "none";
                 logoutBtn.style.display = "inline-block";
+                clearBtn.style.display = "inline-block";
                 guestNote.innerText = "";
                 input.disabled = false;
             } else {
@@ -129,6 +143,7 @@
                 avatarEl.innerText = "G";
                 loginBtn.style.display = "inline-block";
                 logoutBtn.style.display = "none";
+                clearBtn.style.display = "none";
                 guestNote.innerText =
                     `Bạn đang dùng Guest (${MAX_GUEST - guestCount}/${MAX_GUEST} câu miễn phí)`;
                 input.disabled = guestCount >= MAX_GUEST;
@@ -137,7 +152,7 @@
 
         updateUI();
 
-        /* ================= LOAD CHAT HISTORY ================= */
+        /* ================= LOAD HISTORY ================= */
         async function loadHistory() {
             try {
                 const res = await fetch("/history", {
@@ -157,9 +172,7 @@
                 });
 
                 chatBox.scrollTop = chatBox.scrollHeight;
-            } catch {
-                console.log("Không load được lịch sử");
-            }
+            } catch {}
         }
 
         loadHistory();
@@ -176,7 +189,21 @@
             localStorage.removeItem("username");
 
             updateUI();
-            loadHistory();
+            chatBox.innerHTML = "";
+        }
+
+        /* ================= CLEAR HISTORY ================= */
+        async function clearHistory() {
+            if (!confirm("Xoá toàn bộ lịch sử chat?")) return;
+
+            await fetch("/clear-history", {
+                method: "POST",
+                headers: {
+                    Authorization: "Bearer " + token
+                }
+            });
+
+            chatBox.innerHTML = "";
         }
 
         /* ================= CHAT ================= */
