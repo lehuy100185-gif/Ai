@@ -6,8 +6,9 @@ import jwt from "jsonwebtoken";
 import fetch from "node-fetch";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = "chatgpt-mini-secret";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const USERS_FILE = "./data/users.json";
 const CHAT_FILE = "./data/chats.json";
@@ -42,8 +43,7 @@ function getUsernameFromReq(req) {
     if (!auth || !auth.startsWith("Bearer ")) return null;
 
     try {
-        const decoded = jwt.verify(auth.split(" ")[1], JWT_SECRET);
-        return decoded.username;
+        return jwt.verify(auth.split(" ")[1], JWT_SECRET).username;
     } catch {
         return null;
     }
@@ -61,10 +61,9 @@ app.post("/register", async(req, res) => {
     if (users[username])
         return res.json({ error: "Tên người dùng đã tồn tại" });
 
-    const hash = await bcrypt.hash(password, 10);
-    users[username] = { password: hash };
-
+    users[username] = { password: await bcrypt.hash(password, 10) };
     writeJSON(USERS_FILE, users);
+
     res.json({ success: true });
 });
 
@@ -80,17 +79,21 @@ app.post("/login", async(req, res) => {
     if (!users[username])
         return res.json({ error: "Sai tài khoản" });
 
-    const ok = await bcrypt.compare(password, users[username].password);
-    if (!ok)
+    if (!(await bcrypt.compare(password, users[username].password)))
         return res.json({ error: "Sai mật khẩu" });
 
-    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, username });
+    res.json({
+        token: jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" }),
+        username
+    });
 });
 
-/* ================= CHAT (GIỮ CONTEXT) ================= */
+/* ================= CHAT (GROQ + CONTEXT) ================= */
 app.post("/chat", async(req, res) => {
     try {
+        if (!GROQ_API_KEY)
+            return res.json({ reply: "❌ Chưa cấu hình GROQ_API_KEY" });
+
         const { message } = req.body;
         if (!message)
             return res.json({ reply: "❌ Không có nội dung" });
@@ -102,7 +105,6 @@ app.post("/chat", async(req, res) => {
             content: "Bạn là trợ lý AI tiếng Việt. Trả lời ngắn gọn, đúng trọng tâm."
         }];
 
-        // nạp context cũ
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             const history = chats[username] || [];
@@ -111,35 +113,34 @@ app.post("/chat", async(req, res) => {
 
         messages.push({ role: "user", content: message });
 
-        let data;
-        try {
-            const response = await fetch("http://localhost:11434/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "qwen2.5:1.5b",
-                    messages,
-                    stream: false
-                })
-            });
-            data = await response.json();
-        } catch (e) {
-            console.error("OLLAMA CONNECT ERROR:", e);
-            return res.json({ reply: "❌ Không kết nối được Ollama" });
-        }
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "llama-3.1-8b-instant",
+                messages,
+                temperature: 0.2,
+                max_tokens: 500
+            })
+        });
 
-        // ✅ CHECK AN TOÀN – KHÔNG DÙNG ?. 
+        const data = await response.json();
+
         if (!data ||
-            !data.message ||
-            !data.message.content
+            !data.choices ||
+            !data.choices[0] ||
+            !data.choices[0].message ||
+            !data.choices[0].message.content
         ) {
-            console.error("OLLAMA RAW:", data);
-            return res.json({ reply: "❌ Ollama không phản hồi đúng" });
+            console.error("GROQ RAW:", data);
+            return res.json({ reply: "❌ Groq không phản hồi đúng" });
         }
 
-        const reply = data.message.content;
+        const reply = data.choices[0].message.content;
 
-        // lưu lịch sử
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             if (!chats[username]) chats[username] = [];
@@ -157,16 +158,14 @@ app.post("/chat", async(req, res) => {
     }
 });
 
-/* ================= LOAD HISTORY ================= */
+/* ================= HISTORY ================= */
 app.get("/history", (req, res) => {
     const username = getUsernameFromReq(req);
     if (!username) return res.json([]);
 
-    const chats = readJSON(CHAT_FILE, "{}");
-    res.json(chats[username] || []);
+    res.json(readJSON(CHAT_FILE, "{}")[username] || []);
 });
 
-/* ================= CLEAR HISTORY ================= */
 app.delete("/history", (req, res) => {
     const username = getUsernameFromReq(req);
     if (!username) return res.json({ error: "Chưa đăng nhập" });
