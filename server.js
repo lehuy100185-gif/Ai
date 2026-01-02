@@ -58,7 +58,6 @@ app.post("/register", async(req, res) => {
     username = username.trim().toLowerCase();
     const users = readJSON(USERS_FILE, "{}");
 
-    // ✅ chặn trùng tên tuyệt đối
     if (users[username])
         return res.json({ error: "Tên người dùng đã tồn tại" });
 
@@ -92,16 +91,18 @@ app.post("/login", async(req, res) => {
 app.post("/chat", async(req, res) => {
     try {
         const { message } = req.body;
-        if (!message) return res.json({ reply: "❌ Không có nội dung" });
+        if (!message)
+            return res.json({ reply: "❌ Không có nội dung" });
 
         const username = getUsernameFromReq(req);
 
-        let messages = [{
+        // system prompt
+        const messages = [{
             role: "system",
             content: "Bạn là trợ lý AI tiếng Việt. Trả lời ngắn gọn, đúng trọng tâm."
         }];
 
-        // ✅ nạp context cũ
+        // load context cũ
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             const history = chats[username] || [];
@@ -130,7 +131,8 @@ app.post("/chat", async(req, res) => {
             console.error("OLLAMA RAW:", data);
             return res.json({ reply: "❌ Ollama không trả lời" });
         }
-        // ✅ lưu lịch sử
+
+        // lưu lịch sử
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             if (!chats[username]) chats[username] = [];
@@ -143,7 +145,7 @@ app.post("/chat", async(req, res) => {
         res.json({ reply: data.message.content });
 
     } catch (err) {
-        console.error(err);
+        console.error("SERVER ERROR:", err);
         res.json({ reply: "❌ Server lỗi" });
     }
 });
