@@ -77,11 +77,12 @@ app.post("/login", async(req, res) => {
     username = username.trim().toLowerCase();
     const users = readJSON(USERS_FILE, "{}");
 
-    const user = users[username];
-    if (!user) return res.json({ error: "Sai tài khoản" });
+    if (!users[username])
+        return res.json({ error: "Sai tài khoản" });
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.json({ error: "Sai mật khẩu" });
+    const ok = await bcrypt.compare(password, users[username].password);
+    if (!ok)
+        return res.json({ error: "Sai mật khẩu" });
 
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "7d" });
     res.json({ token, username });
@@ -96,53 +97,59 @@ app.post("/chat", async(req, res) => {
 
         const username = getUsernameFromReq(req);
 
-        // system prompt
         const messages = [{
             role: "system",
             content: "Bạn là trợ lý AI tiếng Việt. Trả lời ngắn gọn, đúng trọng tâm."
         }];
 
-        // load context cũ
+        // nạp context cũ
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             const history = chats[username] || [];
-            messages.push(...history.slice(-10)); // lấy 10 tin gần nhất
+            messages.push(...history.slice(-10));
         }
 
         messages.push({ role: "user", content: message });
 
-        const response = await fetch("http://localhost:11434/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: "qwen2.5:1.5b",
-                messages,
-                options: {
-                    num_predict: 200,
-                    temperature: 0.2
-                },
-                stream: false
-            })
-        });
-
-        const data = await response.json();
-
-        if (!data.message || !data.message.content) {
-            console.error("OLLAMA RAW:", data);
-            return res.json({ reply: "❌ Ollama không trả lời" });
+        let data;
+        try {
+            const response = await fetch("http://localhost:11434/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "qwen2.5:1.5b",
+                    messages,
+                    stream: false
+                })
+            });
+            data = await response.json();
+        } catch (e) {
+            console.error("OLLAMA CONNECT ERROR:", e);
+            return res.json({ reply: "❌ Không kết nối được Ollama" });
         }
+
+        // ✅ CHECK AN TOÀN – KHÔNG DÙNG ?. 
+        if (!data ||
+            !data.message ||
+            !data.message.content
+        ) {
+            console.error("OLLAMA RAW:", data);
+            return res.json({ reply: "❌ Ollama không phản hồi đúng" });
+        }
+
+        const reply = data.message.content;
 
         // lưu lịch sử
         if (username) {
             const chats = readJSON(CHAT_FILE, "{}");
             if (!chats[username]) chats[username] = [];
 
-            chats[username].push({ role: "user", content: message }, { role: "assistant", content: data.message.content });
+            chats[username].push({ role: "user", content: message }, { role: "assistant", content: reply });
 
             writeJSON(CHAT_FILE, chats);
         }
 
-        res.json({ reply: data.message.content });
+        res.json({ reply });
 
     } catch (err) {
         console.error("SERVER ERROR:", err);
