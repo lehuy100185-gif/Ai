@@ -110,6 +110,7 @@
 
     <script>
         const MAX_GUEST = 3;
+        const RESET_TIME = 24 * 60 * 60 * 1000; // 24h
 
         const userEl = document.getElementById("user");
         const avatarEl = document.getElementById("avatar");
@@ -122,13 +123,34 @@
 
         let token = localStorage.getItem("token");
         let username = localStorage.getItem("username");
-        let guestCount = Number(localStorage.getItem("guestCount") || 0);
 
-        /* ================= UI ================= */
+        /* ===== GUEST RESET 24H ===== */
+        function loadGuestCount() {
+            let count = Number(localStorage.getItem("guestCount") || 0);
+            let start = Number(localStorage.getItem("guestStartTime") || 0);
+
+            if (!start) {
+                localStorage.setItem("guestStartTime", Date.now());
+                localStorage.setItem("guestCount", 0);
+                return 0;
+            }
+
+            if (Date.now() - start >= RESET_TIME) {
+                localStorage.setItem("guestStartTime", Date.now());
+                localStorage.setItem("guestCount", 0);
+                return 0;
+            }
+
+            return count;
+        }
+
+        let guestCount = loadGuestCount();
+
+        /* ===== UI ===== */
         function updateUI() {
             token = localStorage.getItem("token");
             username = localStorage.getItem("username");
-            guestCount = Number(localStorage.getItem("guestCount") || 0);
+            guestCount = loadGuestCount();
 
             if (token && username) {
                 userEl.innerText = username;
@@ -152,75 +174,66 @@
 
         updateUI();
 
-        /* ================= LOAD HISTORY ================= */
+        /* ===== HISTORY ===== */
         async function loadHistory() {
-            try {
-                const res = await fetch("/history", {
-                    headers: token ? {
-                        Authorization: "Bearer " + token
-                    } : {}
-                });
-
-                const history = await res.json();
-                chatBox.innerHTML = "";
-
-                history.forEach(m => {
-                    const div = document.createElement("div");
-                    div.className = "msg " + (m.role === "user" ? "user" : "ai");
-                    div.innerText = m.content;
-                    chatBox.appendChild(div);
-                });
-
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } catch {}
+            if (!token) return;
+            const res = await fetch("/history", {
+                headers: {
+                    Authorization: "Bearer " + token
+                }
+            });
+            const history = await res.json();
+            chatBox.innerHTML = "";
+            history.forEach(m => {
+                const div = document.createElement("div");
+                div.className = "msg " + (m.role === "user" ? "user" : "ai");
+                div.innerText = m.content;
+                chatBox.appendChild(div);
+            });
         }
-
         loadHistory();
 
-        /* ================= AUTH ================= */
+        /* ===== AUTH ===== */
         function goLogin() {
             window.location.href = "/login.html";
         }
 
         function logout() {
             if (!confirm("Đăng xuất?")) return;
-
             localStorage.removeItem("token");
             localStorage.removeItem("username");
-
             updateUI();
             chatBox.innerHTML = "";
         }
 
-        /* ================= CLEAR HISTORY ================= */
+        /* ===== CLEAR HISTORY ===== */
         async function clearHistory() {
             if (!confirm("Xoá toàn bộ lịch sử chat?")) return;
-
-            await fetch("/clear-history", {
-                method: "POST",
+            await fetch("/history", {
+                method: "DELETE",
                 headers: {
                     Authorization: "Bearer " + token
                 }
             });
-
             chatBox.innerHTML = "";
         }
 
-        /* ================= CHAT ================= */
+        /* ===== CHAT ===== */
         async function send() {
             const msg = input.value.trim();
             if (!msg) return;
 
             if (!token) {
                 if (guestCount >= MAX_GUEST) {
-                    alert("⚠️ Bạn đã hết 3 câu miễn phí. Vui lòng đăng nhập.");
+                    alert("⚠️ Bạn đã hết lượt miễn phí. Vui lòng đăng nhập.");
                     goLogin();
                     return;
                 }
                 guestCount++;
                 localStorage.setItem("guestCount", guestCount);
-                updateUI();
             }
+
+            updateUI();
 
             chatBox.innerHTML += `<div class="msg user">${msg}</div>`;
             input.value = "";
@@ -243,9 +256,8 @@
                         message: msg
                     })
                 });
-
                 const data = await res.json();
-                ai.innerText = data.reply || "❌ Lỗi phản hồi";
+                ai.innerText = data.reply || "❌ Lỗi";
             } catch {
                 ai.innerText = "❌ Không kết nối server";
             }
